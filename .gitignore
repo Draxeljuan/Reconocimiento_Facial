@@ -1,0 +1,41 @@
+# Archivos de entorno y credenciales locales (privado)
+.env
+.env.*
+!.env.example
+
+# Documentación interna y directrices de agente (privado)
+AGENTS.md
+Propuesta Inicial.md
+
+# Base de datos SQLite y persistencia (conservar directorio mediante .gitkeep)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite*
+
+# Certificados SSL/TLS autofirmados y llaves criptográficas (conservar directorio mediante .gitkeep)
+certs/*.key
+certs/*.crt
+certs/*.pem
+certs/*.csr
+certs/*.srl
+
+# Caché y artefactos de Python / Entornos virtuales
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+# Archivos temporales de sistema operativo e IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

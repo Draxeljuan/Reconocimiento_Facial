@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reconocimiento Facial y Recuperación de Datos — LAN</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">RF</div>
+      <div>
+        <h1>Reconocimiento Facial Biométrico</h1>
+        <p class="subtitle">Identificación 128D en tiempo real sobre Red Local (HTTPS + WebRTC)</p>
+      </div>
+    </div>
+    <div class="system-pills">
+      <span id="pillHttps" class="pill pill-neutral">Verificando TLS...</span>
+      <span id="pillApi" class="pill pill-neutral">API: Conectando...</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="securityAlert" class="alert alert-warning hidden" role="alert">
+      <strong>Contexto no seguro detectado:</strong> Los navegadores móviles y modernos requieren
+      acceder mediante <code>https://</code> para habilitar la cámara WebRTC.
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="Modos de operación">
+      <button id="tabBtnInferencia" class="tab-btn active" role="tab" aria-selected="true" data-tab="viewInferencia">
+        1. Identificación Biométrica
+      </button>
+      <button id="tabBtnRegistro" class="tab-btn" role="tab" aria-selected="false" data-tab="viewRegistro">
+        2. Enrolamiento de Usuario (1:N)
+      </button>
+    </nav>
+
+    <div class="workspace-grid">
+      <!-- Columna Izquierda: Cámara WebRTC compartida entre Identificación y Enrolamiento -->
+      <section class="card camera-card" aria-labelledby="cameraHeading">
+        <div class="card-header">
+          <h2 id="cameraHeading">Captura de Video WebRTC</h2>
+          <span id="cameraBadge" class="badge badge-idle">Cámara inactiva</span>
+        </div>
+
+        <div class="video-wrapper">
+          <video id="videoStream" autoplay playsinline muted></video>
+          <div class="scan-reticle" id="scanReticle" aria-hidden="true"></div>
+          <div id="videoPlaceholder" class="video-placeholder">
+            <p>Presiona <strong>Iniciar Cámara</strong> y concede permisos en tu navegador.</p>
+          </div>
+        </div>
+
+        <!-- Canvas oculto para extracción transitoria de fotogramas en RAM -->
+        <canvas id="captureCanvas" class="hidden"></canvas>
+
+        <div class="camera-controls">
+          <button id="btnToggleCamera" type="button" class="btn btn-primary">
+            Iniciar Cámara
+          </button>
+          <button id="btnSwitchCamera" type="button" class="btn btn-secondary" disabled>
+            Cambiar Cámara (Frontal/Trasera)
+          </button>
+        </div>
+      </section>
+
+      <!-- Columna Derecha Vista 1: Inferencia y Recuperación de Perfil -->
+      <section id="viewInferencia" class="card panel-view" role="tabpanel" aria-labelledby="tabBtnInferencia">
+        <div class="card-header">
+          <h2>Autenticación y Consulta de Perfil</h2>
+          <span id="latencyBadge" class="badge badge-neutral">Latencia: -- ms</span>
+        </div>
+
+        <p class="helper-text">
+          Posiciona tu rostro dentro del recuadro. El fotograma se procesa únicamente en memoria RAM y se descarta de inmediato (RNF03).
+        </p>
+
+        <div class="action-row">
+          <button id="btnIdentifyNow" type="button" class="btn btn-accent" disabled>
+            Identificar Rostro Ahora
+          </button>
+          <button id="btnAutoScan" type="button" class="btn btn-outline" disabled>
+            Iniciar Escaneo Continuo
+          </button>
+        </div>
+
+        <div id="resultIdle" class="result-box result-neutral">
+          <h3>Esperando captura...</h3>
+          <p>Inicia la cámara y pulsa <em>Identificar Rostro Ahora</em> para consultar la base biométrica.</p>
+        </div>
+
+        <div id="resultNotFound" class="result-box result-danger hidden" role="status">
+          <div class="result-status-header">
+            <span class="status-dot dot-danger"></span>
+            <h3 id="notFoundTitle">Usuario no reconocido</h3>
+          </div>
+          <p id="notFoundDetail">El rostro capturado no coincide con ningún perfil dentro del umbral (&le; 0.60).</p>
+        </div>
+
+        <div id="resultProfile" class="result-box result-success hidden" role="status">
+          <div class="result-status-header">
+            <span class="status-dot dot-success"></span>
+            <h3>Identidad Verificada</h3>
+          </div>
+
+          <dl class="profile-grid">
+            <div class="profile-item full-width">
+              <dt>Nombres Completos</dt>
+              <dd id="profNombres">--</dd>
+            </div>
+            <div class="profile-item">
+              <dt>Edad</dt>
+              <dd id="profEdad">--</dd>
+            </div>
+            <div class="profile-item">
+              <dt>ID Registro</dt>
+              <dd id="profId">--</dd>
+            </div>
+            <div class="profile-item full-width">
+              <dt>Carrera / Programa</dt>
+              <dd id="profCarrera">--</dd>
+            </div>
+            <div class="profile-item full-width">
+              <dt>Gustos Musicales</dt>
+              <dd id="profMusica">--</dd>
+            </div>
+            <div class="profile-item">
+              <dt>Distancia Euclidiana</dt>
+              <dd id="profDistancia">--</dd>
+            </div>
+            <div class="profile-item">
+              <dt>Índice de Similitud</dt>
+              <dd id="profConfianza">--</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <!-- Columna Derecha Vista 2: Registro / Enrolamiento Biométrico (1:N) -->
+      <section id="viewRegistro" class="card panel-view hidden" role="tabpanel" aria-labelledby="tabBtnRegistro">
+        <div class="card-header">
+          <h2>Enrolamiento Biométrico (1 a N)</h2>
+          <span id="samplesCountBadge" class="badge badge-neutral">0 muestras</span>
+        </div>
+
+        <form id="enrollForm" novalidate>
+          <div class="form-group">
+            <label for="inputNombres">Nombres Completos *</label>
+            <input id="inputNombres" name="nombres" type="text" required maxlength="150" placeholder="Ej. Juan Sebastián Pérez" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputEdad">Edad</label>
+              <input id="inputEdad" name="edad" type="number" min="0" max="130" placeholder="Ej. 22" />
+            </div>
+            <div class="form-group">
+              <label for="inputCarrera">Carrera</label>
+              <input id="inputCarrera" name="carrera" type="text" maxlength="150" placeholder="Ej. Ingeniería de Sistemas" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputMusica">Gustos Musicales</label>
+            <input id="inputMusica" name="gustos_musicales" type="text" maxlength="255" placeholder="Ej. Rock Clásico, Indie, Jazz" />
+          </div>
+
+          <div class="samples-section">
+            <label>Muestras Faciales Base (se recomienda capturar 2 o 3 ángulos ligeros)</label>
+            <div class="sample-actions">
+              <button id="btnCaptureSample" type="button" class="btn btn-secondary" disabled>
+                + Capturar Muestra de Cámara
+              </button>
+              <label class="btn btn-outline file-label" for="inputFiles">
+                Subir Imágenes...
+              </label>
+              <input id="inputFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" />
+              <button id="btnClearSamples" type="button" class="btn btn-ghost">
+                Limpiar
+              </button>
+            </div>
+
+            <div id="samplesGallery" class="samples-gallery" aria-live="polite"></div>
+          </div>
+
+          <button id="btnSubmitEnroll" type="submit" class="btn btn-accent full-btn">
+            Registrar Usuario y Vectores 128D
+          </button>
+        </form>
+
+        <div id="enrollFeedback" class="alert hidden" role="status"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>Arquitectura Microservicios Docker &bull; FastAPI + OpenCV + dlib (ResNet-128D) + SQLite + WebRTC</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
